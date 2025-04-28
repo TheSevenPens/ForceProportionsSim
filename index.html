@@ -1,0 +1,567 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Drawing Tablet and Display Mapping</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+        }
+        .input-container {
+            margin-bottom: 20px;
+        }
+        .checkbox-container {
+            margin-bottom: 20px;
+        }
+        .rect-container {
+            display: flex;
+            gap: 20px;
+            align-items: flex-end; /* Align bottoms of rectangles */
+            margin-bottom: 20px; /* Space before table */
+        }
+        .rectangle {
+            border: 2px solid #2c3e50;
+            transition: all 0.3s ease;
+            box-sizing: border-box; /* Ensure consistent sizing */
+        }
+        #rect1-container {
+            position: relative;
+            transform: translateX(-50px); /* Move tablet 50px to the left */
+        }
+        #rect2-container {
+            position: relative;
+        }
+        #rect1 {
+            background-color: #A8A8A8; /* Brighter gray for native active area */
+            z-index: 2; /* Above tablet bezels */
+        }
+        #rect1-bezels {
+            position: absolute;
+            background-color: #8A8A8A; /* Slightly darker gray for tablet bezels */
+            border-radius: 10px; /* Rounded corners */
+            z-index: -5; /* Far below native active area and effective active area */
+            box-sizing: border-box;
+        }
+        #rect1-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            border: 4px dotted red; /* Thicker dotted red border for effective active area */
+            background-color: transparent; /* No fill */
+            box-sizing: border-box; /* Ensure border is included in dimensions */
+            z-index: 3; /* Above native active area */
+        }
+        #rect1-circle {
+            position: absolute;
+            z-index: 4; /* Above effective active area */
+            top: 0;
+            left: 0;
+        }
+        #rect2 {
+            background-color: #3498db; /* Original blue for display */
+            z-index: 2; /* Above display bezel and monitor stand */
+        }
+        #rect2-bezels {
+            position: absolute;
+            background-color: #2C3E50; /* Dark gray for display bezel */
+            z-index: -5; /* Far below display and effective active area */
+            box-sizing: border-box;
+        }
+        #rect2-stand-top {
+            position: absolute;
+            background-color: #2C3E50; /* Dark gray for top part of monitor stand */
+            z-index: -5; /* Far below display and effective active area */
+            box-sizing: border-box;
+        }
+        #rect2-stand-bottom {
+            position: absolute;
+            background-color: #2C3E50; /* Dark gray for bottom part of monitor stand */
+            z-index: -5; /* Far below display and effective active area */
+            box-sizing: border-box;
+        }
+        #rect2-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            border: 4px dotted red; /* Thicker dotted red border for effective active area */
+            background-color: transparent; /* No fill */
+            box-sizing: border-box; /* Ensure border is included in dimensions */
+            z-index: 3; /* Above display */
+        }
+        #rect2-ellipse {
+            position: absolute;
+            z-index: 4; /* Above display */
+            top: 0;
+            left: 0;
+        }
+        table {
+            border-collapse: collapse;
+            margin-top: 20px;
+            font-family: Arial, sans-serif;
+        }
+        th, td {
+            border: 1px solid #2c3e50;
+            padding: 10px;
+            text-align: center;
+            min-width: 100px;
+        }
+        th {
+            background-color: #f0f0f0;
+            font-weight: bold;
+        }
+        select {
+            margin-top: 10px;
+            padding: 5px;
+            font-family: Arial, sans-serif;
+            font-size: 14px;
+            width: 200px;
+        }
+    </style>
+</head>
+<body>
+    <div class="input-container">
+        <label for="ratio1">Native active area (e.g., 150 mm x 100 mm, 15 in x 10 in): </label>
+        <input type="text" id="ratio1" value="150 mm x 100 mm">
+    </div>
+    <div class="input-container">
+        <label for="ratio2">Display resolution (e.g., 1920 x 1080): </label>
+        <input type="text" id="ratio2" value="1920 x 1080">
+        <select id="resolution-select">
+            <option value="">Select a common resolution</option>
+            <option value="1920 x 1080">FullHD (1920x1080)</option>
+            <option value="3840 x 2160">4K UHD (3840x2160)</option>
+            <option value="2560 x 1440">QHD (2560x1440)</option>
+            <option value="2560 x 1600">WQXGA (2560x1600)</option>
+            <option value="1920 x 1200">WUXGA (1920x1200)</option>
+            <option value="1280 x 800">WXGA (1280x800)</option>
+            <option value="1280 x 720">HD (1280x720)</option>
+        </select>
+    </div>
+    <div class="checkbox-container">
+        <label for="lockRatio">
+            <input type="checkbox" id="lockRatio"> Force proportions
+        </label>
+    </div>
+    <div class="checkbox-container">
+        <label for="showMapping">
+            <input type="checkbox" id="showMapping" checked> Show effective active area
+        </label>
+    </div>
+    <div class="rect-container">
+        <div id="rect1-container">
+            <div id="rect1-bezels"></div>
+            <div id="rect1" class="rectangle"></div>
+            <div id="rect1-overlay" class="rectangle"></div>
+            <svg id="rect1-circle"></svg>
+        </div>
+        <div id="rect2-container">
+            <div id="rect2-bezels"></div>
+            <div id="rect2-stand-top"></div>
+            <div id="rect2-stand-bottom"></div>
+            <div id="rect2" class="rectangle"></div>
+            <div id="rect2-overlay" class="rectangle"></div>
+            <svg id="rect2-ellipse"></svg>
+        </div>
+    </div>
+    <table>
+        <thead>
+            <tr>
+                <th>Property</th>
+                <th>Value</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr id="display-aspect-ratio-row">
+                <td>Display aspect ratio</td>
+                <td id="display-aspect-ratio-value"></td>
+            </tr>
+            <tr id="native-active-area-row">
+                <td>Native active area</td>
+                <td id="native-active-area-value"></td>
+            </tr>
+            <tr id="native-aspect-ratio-row">
+                <td>Native active area aspect ratio</td>
+                <td id="native-aspect-ratio-value"></td>
+            </tr>
+            <tr id="effective-active-area-row">
+                <td>Effective active area</td>
+                <td id="effective-active-area-value"></td>
+            </tr>
+            <tr id="effective-aspect-ratio-row">
+                <td>Effective active area aspect ratio</td>
+                <td id="effective-aspect-ratio-value"></td>
+            </tr>
+            <tr id="area-difference-row">
+                <td>Native area minus effective area</td>
+                <td id="area-difference-value"></td>
+            </tr>
+        </tbody>
+    </table>
+
+    <script>
+        const rect1 = document.getElementById('rect1');
+        const rect1Bezels = document.getElementById('rect1-bezels');
+        const rect1Overlay = document.getElementById('rect1-overlay');
+        const rect1Circle = document.getElementById('rect1-circle');
+        const rect2 = document.getElementById('rect2');
+        const rect2Bezels = document.getElementById('rect2-bezels');
+        const rect2StandTop = document.getElementById('rect2-stand-top');
+        const rect2StandBottom = document.getElementById('rect2-stand-bottom');
+        const rect2Overlay = document.getElementById('rect2-overlay');
+        const rect2Ellipse = document.getElementById('rect2-ellipse');
+        const ratio1Input = document.getElementById('ratio1');
+        const ratio2Input = document.getElementById('ratio2');
+        const resolutionSelect = document.getElementById('resolution-select');
+        const lockRatioCheckbox = document.getElementById('lockRatio');
+        const showMappingCheckbox = document.getElementById('showMapping');
+        const nativeActiveAreaValue = document.getElementById('native-active-area-value');
+        const nativeAspectRatioValue = document.getElementById('native-aspect-ratio-value');
+        const effectiveActiveAreaValue = document.getElementById('effective-active-area-value');
+        const effectiveAspectRatioValue = document.getElementById('effective-aspect-ratio-value');
+        const displayAspectRatioValue = document.getElementById('display-aspect-ratio-value');
+        const areaDifferenceValue = document.getElementById('area-difference-value');
+        const effectiveActiveAreaRow = document.getElementById('effective-active-area-row');
+        const effectiveAspectRatioRow = document.getElementById('effective-aspect-ratio-row');
+        const areaDifferenceRow = document.getElementById('area-difference-row');
+
+        function parseDimensions(input) {
+            // Remove any whitespace
+            const cleanedInput = input.replace(/\s+/g, '');
+            const regex = /^(\d*\.?\d*)\s*(mm|cm|in)\s*x\s*(\d*\.?\d*)\s*(mm|cm|in)$/i;
+            const match = cleanedInput.match(regex);
+            if (match) {
+                const width = parseFloat(match[1]);
+                const height = parseFloat(match[3]);
+                const unit = match[2].toLowerCase();
+                if (width > 0 && height > 0) {
+                    return { width, height, unit, input: `${width} ${unit} x ${height} ${unit}` };
+                }
+            }
+            // Default values if input is invalid
+            return { width: 150, height: 100, unit: 'mm', input: '150 mm x 100 mm' };
+        }
+
+        function parseAspectRatio(input, isPhysical = false) {
+            // Remove any whitespace
+            const cleanedInput = input.replace(/\s+/g, '');
+            
+            // For physical dimensions (e.g., "150mmx100mm", "15cmx10cm", "15inx10in")
+            if (isPhysical) {
+                const regex = /^(\d*\.?\d*)\s*(mm|cm|in)\s*x\s*(\d*\.?\d*)\s*(mm|cm|in)$/i;
+                const match = cleanedInput.match(regex);
+                if (match) {
+                    const width = parseFloat(match[1]);
+                    const height = parseFloat(match[3]);
+                    if (width > 0 && height > 0) {
+                        return width / height;
+                    }
+                }
+            } else {
+                // For resolution (e.g., "1920x1080")
+                const regex = /^(\d+)\s*x\s*(\d+)$/;
+                const match = cleanedInput.match(regex);
+                if (match) {
+                    const width = parseFloat(match[1]);
+                    const height = parseFloat(match[2]);
+                    if (width > 0 && height > 0) {
+                        return width / height;
+                    }
+                }
+            }
+            
+            // Default to 1 if input is invalid
+            return 1;
+        }
+
+        function updateRectangles() {
+            const maxDimension = 150; // Maximum length for native active area dimensions
+            const maxRect1Width = 100; // Maximum width for native active area
+
+            // Parse aspect ratios
+            const ratio1 = parseAspectRatio(ratio1Input.value, true); // Physical dimensions for native active area
+            const ratio2 = parseAspectRatio(ratio2Input.value, false); // Resolution for display
+
+            // Parse dimensions for native active area
+            const { width: nativeWidth, height: nativeHeight, unit, input: nativeInput } = parseDimensions(ratio1Input.value);
+            let nativeArea = nativeWidth * nativeHeight;
+            let displayUnit = unit;
+            if (unit === 'mm') {
+                nativeArea = nativeArea / 100; // Convert mm² to cm²
+                displayUnit = 'cm';
+            }
+            nativeActiveAreaValue.innerHTML = `${nativeInput} = ${nativeArea.toFixed(2)} ${displayUnit}²`;
+            nativeAspectRatioValue.innerHTML = `${(nativeWidth / nativeHeight).toFixed(2)}`;
+
+            // Function to calculate dimensions with max dimension constraint
+            function calculateDimensions(ratio, isRect1 = false) {
+                let width, height;
+                if (isRect1) {
+                    // For native active area, cap at 150x150 pixels
+                    if (ratio >= 1) {
+                        // Width is the longest dimension
+                        width = Math.min(maxDimension, maxRect1Width); // Cap at 150px or 100px
+                        height = width / ratio;
+                        if (height > maxDimension) {
+                            height = maxDimension;
+                            width = height * ratio;
+                        }
+                    } else {
+                        // Height is the longest dimension
+                        height = maxDimension; // Cap at 150px
+                        width = height * ratio;
+                        if (width > maxRect1Width) {
+                            width = maxRect1Width;
+                            height = width / ratio;
+                        }
+                        if (width > maxDimension) {
+                            width = maxDimension;
+                            height = width / ratio;
+                        }
+                    }
+                } else {
+                    // For display, use original logic with 200px max
+                    if (ratio >= 1) {
+                        // Width is the longest dimension
+                        width = 200; // Original max dimension for display
+                        height = width / ratio;
+                    } else {
+                        // Height is the longest dimension
+                        height = 200;
+                        width = height * ratio;
+                    }
+                }
+                return { width, height };
+            }
+
+            // Calculate dimensions for both rectangles
+            const rect1Dims = calculateDimensions(ratio1, true);
+            const rect2Dims = calculateDimensions(ratio2, false);
+
+            // Calculate dimensions for tablet bezels (30% larger than rect1)
+            const tabletBezelsDims = {
+                width: rect1Dims.width * 1.3,
+                height: rect1Dims.height * 1.3
+            };
+            // Center the tablet bezels both horizontally and vertically relative to rect1
+            const tabletBezelsOffsetX = (rect1Dims.width - tabletBezelsDims.width) / 2;
+            const tabletBezelsOffsetY = (rect1Dims.height - tabletBezelsDims.height) / 2;
+
+            // Calculate dimensions for display bezel (10% larger than rect2)
+            const displayBezelsDims = {
+                width: rect2Dims.width * 1.1,
+                height: rect2Dims.height * 1.1
+            };
+            // Center the display bezel both horizontally and vertically relative to rect2
+            const displayBezelsOffsetX = (rect2Dims.width - displayBezelsDims.width) / 2;
+            const displayBezelsOffsetY = (rect2Dims.height - displayBezelsDims.height) / 2;
+
+            // Calculate dimensions for monitor stand (top: 30% of display width, bottom: 50% of display width)
+            const standTopHeight = 20; // Fixed height for top monitor stand rectangle
+            const standBottomHeight = standTopHeight * 0.5; // 50% thinner vertically
+            const standTopDims = {
+                width: rect2Dims.width * 0.3,
+                height: standTopHeight
+            };
+            const standBottomDims = {
+                width: rect2Dims.width * 0.5,
+                height: standBottomHeight
+            };
+            // Center the monitor stand rectangles horizontally relative to rect2, position below display bezel
+            const standTopOffsetX = (rect2Dims.width - standTopDims.width) / 2;
+            const standTopOffsetY = displayBezelsDims.height + displayBezelsOffsetY;
+            const standBottomOffsetX = (rect2Dims.width - standBottomDims.width) / 2;
+            const standBottomOffsetY = standTopOffsetY + standTopDims.height;
+
+            // Calculate dimensions for rect1-overlay based on checkbox
+            let rect1OverlayDims;
+            if (lockRatioCheckbox.checked) {
+                // Use display's aspect ratio, fit within native active area's dimensions
+                const rect2Ratio = ratio2;
+                const maxWidth = rect1Dims.width;
+                const maxHeight = rect1Dims.height;
+                let width, height;
+                if (rect2Ratio >= 1) {
+                    // Width-limited by native active area's width
+                    width = Math.min(maxWidth, maxRect1Width);
+                    height = width / rect2Ratio;
+                    if (height > maxHeight) {
+                        height = maxHeight;
+                        width = height * rect2Ratio;
+                    }
+                } else {
+                    // Height-limited by native active area's height
+                    height = maxHeight;
+                    width = height * rect2Ratio;
+                    if (width > maxWidth) {
+                        width = Math.min(maxWidth, maxRect1Width);
+                        height = width / rect2Ratio;
+                    }
+                }
+                rect1OverlayDims = { width, height };
+            } else {
+                // Match native active area's dimensions
+                rect1OverlayDims = rect1Dims;
+            }
+
+            // Calculate effective active area in physical units
+            const scaleX = nativeWidth / rect1Dims.width;
+            const scaleY = nativeHeight / rect1Dims.height;
+            const effectiveWidth = rect1OverlayDims.width * scaleX;
+            const effectiveHeight = rect1OverlayDims.height * scaleY;
+            let effectiveArea = effectiveWidth * effectiveHeight;
+            if (unit === 'mm') {
+                effectiveArea = effectiveArea / 100; // Convert mm² to cm²
+            }
+            effectiveActiveAreaValue.innerHTML = `${effectiveWidth.toFixed(2)} ${unit} x ${effectiveHeight.toFixed(2)} ${unit} = ${effectiveArea.toFixed(2)} ${displayUnit}²`;
+            effectiveAspectRatioValue.innerHTML = `${(rect1OverlayDims.width / rect1OverlayDims.height).toFixed(2)}`;
+            displayAspectRatioValue.innerHTML = `${(rect2Dims.width / rect2Dims.height).toFixed(2)}`;
+
+            // Calculate area difference and percentage change
+            const areaDifference = nativeArea - effectiveArea;
+            const percentageChange = (areaDifference / nativeArea) * 100;
+            const displayAreaDifference = areaDifference > 0 ? `-${areaDifference.toFixed(2)}` : `${Math.abs(areaDifference).toFixed(2)}`;
+            const displayPercentageChange = areaDifference > 0 ? `-${percentageChange.toFixed(2)}` : `${Math.abs(percentageChange).toFixed(2)}`;
+            areaDifferenceValue.innerHTML = `${displayAreaDifference} ${displayUnit}² (${displayPercentageChange}%)`;
+
+            // Calculate dimensions for the red circle in the effective active area
+            const shortestSide = Math.min(rect1OverlayDims.width, rect1OverlayDims.height);
+            const circleDiameter = shortestSide * 0.5;
+            const circleRadius = circleDiameter / 2;
+            const circleCenterX = rect1OverlayDims.width / 2;
+            const circleCenterY = rect1OverlayDims.height / 2;
+
+            // Update SVG circle
+            rect1Circle.innerHTML = `<circle cx="${circleCenterX}" cy="${circleCenterY}" r="${circleRadius}" stroke="red" stroke-width="2" fill="none" />`;
+            rect1Circle.style.width = `${rect1OverlayDims.width}px`;
+            rect1Circle.style.height = `${rect1OverlayDims.height}px`;
+            rect1Circle.style.top = '0px';
+            rect1Circle.style.left = '0px';
+            rect1Circle.style.display = showMappingCheckbox.checked ? 'block' : 'none';
+
+            // Calculate dimensions for the red ellipse in the display
+            const effectiveAspectRatio = rect1OverlayDims.width / rect1OverlayDims.height;
+            const displayAspectRatio = rect2Dims.width / rect2Dims.height;
+            let ellipseAspectRatio = effectiveAspectRatio / displayAspectRatio;
+            if (ellipseAspectRatio < 1) {
+                ellipseAspectRatio = 1 / ellipseAspectRatio; // Ensure aspect ratio ≥ 1
+            }
+            let ellipseRx, ellipseRy;
+            if (ellipseAspectRatio >= 1) {
+                // Wider ellipse
+                ellipseRx = rect2Dims.width * 0.2; // 40% of display width / 2
+                ellipseRy = ellipseRx / ellipseAspectRatio;
+            } else {
+                // Taller ellipse
+                ellipseRy = rect2Dims.height * 0.2; // 40% of display height / 2
+                ellipseRx = ellipseRy * ellipseAspectRatio;
+            }
+            const ellipseCenterX = rect2Dims.width / 2;
+            const ellipseCenterY = rect2Dims.height / 2;
+
+            // Update SVG ellipse
+            rect2Ellipse.innerHTML = `<ellipse cx="${ellipseCenterX}" cy="${ellipseCenterY}" rx="${ellipseRx}" ry="${ellipseRy}" stroke="red" stroke-width="2" fill="none" />`;
+            rect2Ellipse.style.width = `${rect2Dims.width}px`;
+            rect2Ellipse.style.height = `${rect2Dims.height}px`;
+            rect2Ellipse.style.top = '0px';
+            rect2Ellipse.style.left = '0px';
+            rect2Ellipse.style.display = showMappingCheckbox.checked ? 'block' : 'none';
+
+            // Apply dimensions to rectangles
+            rect1.style.width = `${rect1Dims.width}px`;
+            rect1.style.height = `${rect1Dims.height}px`;
+            rect1Bezels.style.width = `${tabletBezelsDims.width}px`;
+            rect1Bezels.style.height = `${tabletBezelsDims.height}px`;
+            rect1Bezels.style.left = `${tabletBezelsOffsetX}px`;
+            rect1Bezels.style.top = `${tabletBezelsOffsetY}px`;
+            rect1Overlay.style.width = `${rect1OverlayDims.width}px`;
+            rect1Overlay.style.height = `${rect1OverlayDims.height}px`;
+            rect2.style.width = `${rect2Dims.width}px`;
+            rect2.style.height = `${rect2Dims.height}px`;
+            rect2Bezels.style.width = `${displayBezelsDims.width}px`;
+            rect2Bezels.style.height = `${displayBezelsDims.height}px`;
+            rect2Bezels.style.left = `${displayBezelsOffsetX}px`;
+            rect2Bezels.style.top = `${displayBezelsOffsetY}px`;
+            rect2StandTop.style.width = `${standTopDims.width}px`;
+            rect2StandTop.style.height = `${standTopDims.height}px`;
+            rect2StandTop.style.left = `${standTopOffsetX}px`;
+            rect2StandTop.style.top = `${standTopOffsetY}px`;
+            rect2StandBottom.style.width = `${standBottomDims.width}px`;
+            rect2StandBottom.style.height = `${standBottomDims.height}px`;
+            rect2StandBottom.style.left = `${standBottomOffsetX}px`;
+            rect2StandBottom.style.top = `${standBottomOffsetY}px`;
+            rect2Overlay.style.width = `${rect2Dims.width}px`;
+            rect2Overlay.style.height = `${rect2Dims.height}px`;
+
+            // Toggle visibility of effective active areas and related table rows
+            const displayStyle = showMappingCheckbox.checked ? 'table-row' : 'none';
+            rect1Overlay.style.display = displayStyle === 'table-row' ? 'block' : 'none';
+            rect2Overlay.style.display = displayStyle === 'table-row' ? 'block' : 'none';
+            rect1Circle.style.display = displayStyle === 'table-row' ? 'block' : 'none';
+            rect2Ellipse.style.display = displayStyle === 'table-row' ? 'block' : 'none';
+            effectiveActiveAreaRow.style.display = displayStyle;
+            effectiveAspectRatioRow.style.display = displayStyle;
+            areaDifferenceRow.style.display = displayStyle;
+        }
+
+        // Update resolution input when a dropdown option is selected
+        resolutionSelect.addEventListener('change', () => {
+            if (resolutionSelect.value) {
+                ratio2Input.value = resolutionSelect.value;
+                updateRectangles();
+            }
+        });
+
+        ratio1Input.addEventListener('input', updateRectangles);
+        ratio2Input.addEventListener('input', updateRectangles);
+        lockRatioCheckbox.addEventListener('change', updateRectangles);
+        showMappingCheckbox.addEventListener('change', updateRectangles);
+
+        // Initial update
+        updateRectangles();
+    </script>
+</body>
+</html>
