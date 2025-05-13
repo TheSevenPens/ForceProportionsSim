@@ -53,6 +53,9 @@
         }
         .input-container {
             margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
         }
         .checkbox-container {
             margin-bottom: 20px;
@@ -160,25 +163,42 @@
             font-size: 14px;
             width: 200px;
         }
+        .dimension-input {
+            width: 100px;
+        }
     </style>
 </head>
 <body>
     <div class="input-container">
-        <label for="ratio1">Native active area (e.g., 150 mm x 100 mm, 15 in x 10 in): </label>
-        <input type="text" id="ratio1" value="150 mm x 100 mm">
+        <label>Native active area:</label>
+        <div>
+            <label for="native-width">Width (e.g., 150 mm, 15 cm, 10 in):</label>
+            <input type="text" id="native-width" class="dimension-input" value="150 mm">
+        </div>
+        <div>
+            <label for="native-height">Height (e.g., 100 mm, 10 cm, 5 in):</label>
+            <input type="text" id="native-height" class="dimension-input" value="100 mm">
+        </div>
     </div>
     <div class="input-container">
-        <label for="ratio2">Display resolution (e.g., 1920 x 1080): </label>
-        <input type="text" id="ratio2" value="1920 x 1080">
+        <label>Display resolution:</label>
+        <div>
+            <label for="display-width">Width (pixels, e.g., 1920):</label>
+            <input type="text" id="display-width" class="dimension-input" value="1920">
+        </div>
+        <div>
+            <label for="display-height">Height (pixels, e.g., 1080):</label>
+            <input type="text" id="display-height" class="dimension-input" value="1080">
+        </div>
         <select id="resolution-select">
             <option value="">Select a common resolution</option>
-            <option value="1920 x 1080">FullHD (1920x1080)</option>
-            <option value="3840 x 2160">4K UHD (3840x2160)</option>
-            <option value="2560 x 1440">QHD (2560x1440)</option>
-            <option value="2560 x 1600">WQXGA (2560x1600)</option>
-            <option value="1920 x 1200">WUXGA (1920x1200)</option>
-            <option value="1280 x 800">WXGA (1280x800)</option>
-            <option value="1280 x 720">HD (1280x720)</option>
+            <option value="1920,1080">FullHD (1920x1080)</option>
+            <option value="3840,2160">4K UHD (3840x2160)</option>
+            <option value="2560,1440">QHD (2560x1440)</option>
+            <option value="2560,1600">WQXGA (2560x1600)</option>
+            <option value="1920,1200">WUXGA (1920x1200)</option>
+            <option value="1280,800">WXGA (1280x800)</option>
+            <option value="1280,720">HD (1280x720)</option>
         </select>
     </div>
     <div class="checkbox-container">
@@ -253,8 +273,10 @@
         const rect2StandBottom = document.getElementById('rect2-stand-bottom');
         const rect2Overlay = document.getElementById('rect2-overlay');
         const rect2Ellipse = document.getElementById('rect2-ellipse');
-        const ratio1Input = document.getElementById('ratio1');
-        const ratio2Input = document.getElementById('ratio2');
+        const nativeWidthInput = document.getElementById('native-width');
+        const nativeHeightInput = document.getElementById('native-height');
+        const displayWidthInput = document.getElementById('display-width');
+        const displayHeightInput = document.getElementById('display-height');
         const resolutionSelect = document.getElementById('resolution-select');
         const lockRatioCheckbox = document.getElementById('lockRatio');
         const showMappingCheckbox = document.getElementById('showMapping');
@@ -268,51 +290,78 @@
         const effectiveAspectRatioRow = document.getElementById('effective-aspect-ratio-row');
         const areaDifferenceRow = document.getElementById('area-difference-row');
 
-        function parseDimensions(input) {
+        function parseDimension(input) {
+            // Check if input is null or undefined
+            if (input == null) {
+                return null;
+            }
             // Remove any whitespace
             const cleanedInput = input.replace(/\s+/g, '');
-            const regex = /^(\d*\.?\d*)\s*(mm|cm|in)\s*x\s*(\d*\.?\d*)\s*(mm|cm|in)$/i;
+            const regex = /^(\d*\.?\d*)\s*(mm|cm|in)$/i;
             const match = cleanedInput.match(regex);
             if (match) {
-                const width = parseFloat(match[1]);
-                const height = parseFloat(match[3]);
+                const value = parseFloat(match[1]);
                 const unit = match[2].toLowerCase();
-                if (width > 0 && height > 0) {
-                    return { width, height, unit, input: `${width} ${unit} x ${height} ${unit}` };
+                if (value > 0) {
+                    return { value, unit };
                 }
+            }
+            return null;
+        }
+
+        function parsePixelDimension(input) {
+            // Check if input is null or undefined
+            if (input == null) {
+                return null;
+            }
+            // Remove any whitespace
+            const cleanedInput = input.replace(/\s+/g, '');
+            const regex = /^(\d+)$/;
+            const match = cleanedInput.match(regex);
+            if (match) {
+                const value = parseInt(match[1], 10);
+                if (value > 0) {
+                    return value;
+                }
+            }
+            return null;
+        }
+
+        function parseDimensions(widthInput, heightInput) {
+            const widthData = parseDimension(widthInput);
+            const heightData = parseDimension(heightInput);
+            if (widthData && heightData && widthData.unit === heightData.unit) {
+                const width = widthData.value;
+                const height = heightData.value;
+                const unit = widthData.unit;
+                return { width, height, unit, input: `${width} ${unit} x ${height} ${unit}` };
             }
             // Default values if input is invalid
             return { width: 150, height: 100, unit: 'mm', input: '150 mm x 100 mm' };
         }
 
-        function parseAspectRatio(input, isPhysical = false) {
-            // Remove any whitespace
-            const cleanedInput = input.replace(/\s+/g, '');
-            
-            // For physical dimensions (e.g., "150mmx100mm", "15cmx10cm", "15inx10in")
+        function parseDisplayResolution(widthInput, heightInput) {
+            const width = parsePixelDimension(widthInput);
+            const height = parsePixelDimension(heightInput);
+            if (width && height) {
+                return { width, height, input: `${width} x ${height}` };
+            }
+            // Default values if input is invalid
+            return { width: 1920, height: 1080, input: '1920 x 1080' };
+        }
+
+        function parseAspectRatio(widthInput, heightInput, isPhysical = false) {
             if (isPhysical) {
-                const regex = /^(\d*\.?\d*)\s*(mm|cm|in)\s*x\s*(\d*\.?\d*)\s*(mm|cm|in)$/i;
-                const match = cleanedInput.match(regex);
-                if (match) {
-                    const width = parseFloat(match[1]);
-                    const height = parseFloat(match[3]);
-                    if (width > 0 && height > 0) {
-                        return width / height;
-                    }
+                const { width, height } = parseDimensions(widthInput, heightInput);
+                if (width > 0 && height > 0) {
+                    return width / height;
                 }
             } else {
-                // For resolution (e.g., "1920x1080")
-                const regex = /^(\d+)\s*x\s*(\d+)$/;
-                const match = cleanedInput.match(regex);
-                if (match) {
-                    const width = parseFloat(match[1]);
-                    const height = parseFloat(match[2]);
-                    if (width > 0 && height > 0) {
-                        return width / height;
-                    }
+                const { width, height } = parseDisplayResolution(widthInput, heightInput);
+                if (width > 0 && height > 0) {
+                    return width / height;
                 }
             }
-            
             // Default to 1 if input is invalid
             return 1;
         }
@@ -322,11 +371,11 @@
             const maxRect1Width = 100; // Maximum width for native active area
 
             // Parse aspect ratios
-            const ratio1 = parseAspectRatio(ratio1Input.value, true); // Physical dimensions for native active area
-            const ratio2 = parseAspectRatio(ratio2Input.value, false); // Resolution for display
+            const ratio1 = parseAspectRatio(nativeWidthInput.value, nativeHeightInput.value, true); // Physical dimensions for native active area
+            const ratio2 = parseAspectRatio(displayWidthInput.value, displayHeightInput.value, false); // Resolution for display
 
             // Parse dimensions for native active area
-            const { width: nativeWidth, height: nativeHeight, unit, input: nativeInput } = parseDimensions(ratio1Input.value);
+            const { width: nativeWidth, height: nativeHeight, unit, input: nativeInput } = parseDimensions(nativeWidthInput.value, nativeHeightInput.value);
             let nativeArea = nativeWidth * nativeHeight;
             let displayUnit = unit;
             if (unit === 'mm') {
@@ -547,16 +596,20 @@
             areaDifferenceRow.style.display = displayStyle;
         }
 
-        // Update resolution input when a dropdown option is selected
+        // Update resolution inputs when a dropdown option is selected
         resolutionSelect.addEventListener('change', () => {
             if (resolutionSelect.value) {
-                ratio2Input.value = resolutionSelect.value;
+                const [width, height] = resolutionSelect.value.split(',').map(Number);
+                displayWidthInput.value = width;
+                displayHeightInput.value = height;
                 updateRectangles();
             }
         });
 
-        ratio1Input.addEventListener('input', updateRectangles);
-        ratio2Input.addEventListener('input', updateRectangles);
+        nativeWidthInput.addEventListener('input', updateRectangles);
+        nativeHeightInput.addEventListener('input', updateRectangles);
+        displayWidthInput.addEventListener('input', updateRectangles);
+        displayHeightInput.addEventListener('input', updateRectangles);
         lockRatioCheckbox.addEventListener('change', updateRectangles);
         showMappingCheckbox.addEventListener('change', updateRectangles);
 
